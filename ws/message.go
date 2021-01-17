@@ -1,5 +1,7 @@
 package ws
 
+import "encoding/json"
+
 const (
 	MessageTypeAnswer    = "answer"
 	MessageTypeCandidate = "candidate"
@@ -9,8 +11,8 @@ const (
 )
 
 type WebsocketMessage struct {
-	Event string `json:"event"`
-	Data  string `json:"data"`
+	Event string          `json:"event"`
+	Data  json.RawMessage `json:"data"`
 }
 
 type ChatMessage struct {

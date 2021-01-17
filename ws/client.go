@@ -38,6 +38,26 @@ func NewClient(hub *Hub, conn *websocket.Conn, webrtcConn *webrtc.PeerConnection
 	}
 }
 
+func (c *Client) SendChatHistory(chatHistory []ChatMessage) {
+	for _, chatMsg := range chatHistory {
+		msg, err := json.Marshal(chatMsg)
+		if err != nil {
+			log.Printf("could not marshal chat message: %s", err)
+			continue
+		}
+		message := WebsocketMessage{
+			Event: MessageTypeChat,
+			Data:  msg,
+		}
+		messageBytes, err := json.Marshal(message)
+		if err != nil {
+			log.Printf("could not marshal message: %s", err)
+			continue
+		}
+		c.Send <- messageBytes
+	}
+}
+
 // ReadLoop pumps messages from the websocket connection to the hub.
 //
 // The application runs ReadLoop in a per-connection goroutine. The application
@@ -45,6 +65,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, webrtcConn *webrtc.PeerConnection
 // reads from this goroutine.
 func (c *Client) ReadLoop() {
 	defer func() {
+		c.PeerConnection.Close() // it is also closed in the ws handler. however, if we unregister the send channel is closed, which may causing the peer connection writing to a closed channel -> panic
 		c.hub.Unregister <- c
 		c.conn.Close()
 	}()
@@ -53,7 +74,6 @@ func (c *Client) ReadLoop() {
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	message := &WebsocketMessage{}
 	for {
-		// _, message, err := c.conn.ReadMessage()
 		_, raw, err := c.conn.ReadMessage()
 		if err != nil {
 			log.Printf("could not read message: %s", err)
@@ -72,7 +92,7 @@ func (c *Client) ReadLoop() {
 		switch message.Event {
 		case MessageTypeChat:
 			chatMsg := ChatMessage{}
-			err = json.Unmarshal([]byte(message.Data), &chatMsg)
+			err = json.Unmarshal(message.Data, &chatMsg)
 			if err != nil {
 				log.Printf("could not unmarshal chat message")
 				return
@@ -84,8 +104,10 @@ func (c *Client) ReadLoop() {
 					log.Printf("could not marshal chat message")
 					return
 				}
-				message.Data = string(newChatMsg)
+				message.Data = newChatMsg
 			}
+			// TODO: make thread safe
+			c.hub.chatHistory <- chatMsg
 			raw, err = json.Marshal(message)
 			if err != nil {
 				log.Printf("could not marshal chat message")

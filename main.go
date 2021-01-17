@@ -214,7 +214,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		candidateString, err := json.Marshal(i.ToJSON())
+		candidateData, err := json.Marshal(i.ToJSON())
 		if err != nil {
 			log.Println(err)
 			return
@@ -222,7 +222,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 		if msg, err := json.Marshal(ws.WebsocketMessage{
 			Event: ws.MessageTypeCandidate,
-			Data:  string(candidateString),
+			Data:  candidateData,
 		}); err == nil {
 			c.Send <- msg
 		} else {
@@ -253,14 +253,14 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 		log.Print(err)
 	}
 
-	offerString, err := json.Marshal(offer)
+	offerData, err := json.Marshal(offer)
 	if err != nil {
 		log.Print(err)
 	}
 
 	if msg, err := json.Marshal(ws.WebsocketMessage{
 		Event: ws.MessageTypeOffer,
-		Data:  string(offerString),
+		Data:  offerData,
 	}); err == nil {
 		c.Send <- msg
 	} else {
@@ -268,6 +268,8 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go hub.SendInfo(hub.GetInfo()) // non-blocking broadcast, required as the read loop is not started yet.
+
+	go c.SendChatHistory(hub.GetChatHistory())
 
 	c.ReadLoop()
 }
