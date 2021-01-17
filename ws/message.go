@@ -12,3 +12,8 @@ type WebsocketMessage struct {
 	Event string `json:"event"`
 	Data  string `json:"data"`
 }
+
+type ChatMessage struct {
+	Nick    string `json:"nick"`
+	Message string `json:"message"`
+}

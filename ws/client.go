@@ -71,8 +71,7 @@ func (c *Client) ReadLoop() {
 
 		switch message.Event {
 		case MessageTypeChat:
-			chatMsg := struct{Message string `json:"message"`
-				Nick string `json:"nick"`}{}
+			chatMsg := ChatMessage{}
 			err = json.Unmarshal([]byte(message.Data), &chatMsg)
 			if err != nil {
 				log.Printf("could not unmarshal chat message")
