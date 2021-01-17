@@ -5,6 +5,7 @@ const (
 	MessageTypeCandidate = "candidate"
 	MessageTypeOffer     = "offer"
 	MessageTypeInfo      = "info"
+	MessageTypeChat      = "chat"
 )
 
 type WebsocketMessage struct {

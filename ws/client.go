@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/folkengine/goname"
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
 )
@@ -21,14 +22,19 @@ type Client struct {
 
 	// webRTC peer connection
 	PeerConnection *webrtc.PeerConnection
+
+	// mockup user name
+	username string
 }
 
 func NewClient(hub *Hub, conn *websocket.Conn, webrtcConn *webrtc.PeerConnection) *Client {
+	name := goname.New(goname.FantasyMap).FirstLast()
 	return &Client{
 		hub:            hub,
 		conn:           conn,
 		Send:           make(chan []byte),
 		PeerConnection: webrtcConn,
+		username:       name,
 	}
 }
 
@@ -64,6 +70,30 @@ func (c *Client) ReadLoop() {
 		}
 
 		switch message.Event {
+		case MessageTypeChat:
+			chatMsg := struct{Message string `json:"message"`
+				Nick string `json:"nick"`}{}
+			err = json.Unmarshal([]byte(message.Data), &chatMsg)
+			if err != nil {
+				log.Printf("could not unmarshal chat message")
+				return
+			}
+			if chatMsg.Nick == "" {
+				chatMsg.Nick = c.username
+				newChatMsg, err := json.Marshal(chatMsg)
+				if err != nil {
+					log.Printf("could not marshal chat message")
+					return
+				}
+				message.Data = string(newChatMsg)
+			}
+			raw, err = json.Marshal(message)
+			if err != nil {
+				log.Printf("could not marshal chat message")
+				return
+			}
+			c.hub.Broadcast <- raw
+
 		case MessageTypeCandidate:
 			candidate := webrtc.ICECandidateInit{}
 			if err := json.Unmarshal([]byte(message.Data), &candidate); err != nil {
@@ -88,10 +118,6 @@ func (c *Client) ReadLoop() {
 				return
 			}
 		}
-
-		// we do not send anything to the other clients!
-		//message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		//c.hub.Broadcast <- message
 	}
 }
 
