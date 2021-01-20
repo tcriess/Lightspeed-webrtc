@@ -122,16 +122,16 @@ func createWebrtcApi() *webrtc.API {
 	// Split given port range into two sides, pass them to SettingEngine
 	pr := strings.SplitN(*ports, "-", 2)
 
-	pr_low, err := strconv.ParseUint(pr[0], 10, 16)
+	prLow, err := strconv.ParseUint(pr[0], 10, 16)
 	if err != nil {
 		panic(err)
 	}
-	pr_high, err := strconv.ParseUint(pr[1], 10, 16)
+	prHigh, err := strconv.ParseUint(pr[1], 10, 16)
 	if err != nil {
 		panic(err)
 	}
 
-	s.SetEphemeralUDPPortRange(uint16(pr_low), uint16(pr_high))
+	s.SetEphemeralUDPPortRange(uint16(prLow), uint16(prHigh))
 
 	// Default parameters as specified in Pion's non-API NewPeerConnection call
 	// These are needed because CreateOffer will not function without them
@@ -164,15 +164,13 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	// Create API that takes IP and port range into account
 	api := createWebrtcApi()
 
-	// Create new PeerConnection
+	// Create new PeerConnection (connection is closed when the ws client is unregistered from the hub)
 	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		log.Print(err)
 		return
 	}
 
-	// When this frame returns close the PeerConnection
-	defer peerConnection.Close() //nolint
 
 	// Accept one audio and one video track Outgoing
 	transceiverVideo, err := peerConnection.AddTransceiverFromTrack(videoTrack,
@@ -189,17 +187,6 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 		log.Print(err)
 		return
 	}
-	go func() {
-		rtcpBuf := make([]byte, 1500)
-		for {
-			if _, _, rtcpErr := transceiverVideo.Sender().Read(rtcpBuf); rtcpErr != nil {
-				return
-			}
-			if _, _, rtcpErr := transceiverAudio.Sender().Read(rtcpBuf); rtcpErr != nil {
-				return
-			}
-		}
-	}()
 
 	c := ws.NewClient(hub, conn, peerConnection)
 
@@ -207,6 +194,20 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Add to the hub
 	hub.Register <- c
+
+	go func() {
+		rtcpBuf := make([]byte, 1500)
+		for {
+			if _, _, rtcpErr := transceiverVideo.Sender().Read(rtcpBuf); rtcpErr != nil {
+				hub.Unregister <- c
+				return
+			}
+			if _, _, rtcpErr := transceiverAudio.Sender().Read(rtcpBuf); rtcpErr != nil {
+				hub.Unregister <- c
+				return
+			}
+		}
+	}()
 
 	// Trickle ICE. Emit server candidate to client
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
@@ -271,5 +272,8 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	go c.SendChatHistory(hub.GetChatHistory())
 
+	defer func() {
+		hub.Unregister <- c
+	}()
 	c.ReadLoop()
 }

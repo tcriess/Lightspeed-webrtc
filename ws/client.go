@@ -64,12 +64,6 @@ func (c *Client) SendChatHistory(chatHistory []ChatMessage) {
 // ensures that there is at most one reader on a connection by executing all
 // reads from this goroutine.
 func (c *Client) ReadLoop() {
-	defer func() {
-		c.PeerConnection.Close() // it is also closed in the ws handler. however, if we unregister the send channel is closed, which may causing the peer connection writing to a closed channel -> panic
-		c.hub.Unregister <- c
-		c.conn.Close()
-	}()
-
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })

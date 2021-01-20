@@ -70,6 +70,8 @@ func (h *Hub) Run() {
 		case client := <-h.Unregister:
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
+				client.PeerConnection.Close()
+				client.conn.Close()
 				close(client.Send)
 				go h.SendInfo(h.GetInfo()) // this way the number of clients does not change between calling the goroutine and executing it
 			}
