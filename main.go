@@ -209,12 +209,12 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	hub.Register <- c
 
 	// Trickle ICE. Emit server candidate to client
-	peerConnection.OnICECandidate(func(i *webrtc.ICECandidate) {
-		if i == nil {
+	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate == nil {
 			return
 		}
 
-		candidateData, err := json.Marshal(i.ToJSON())
+		candidateData, err := json.Marshal(candidate.ToJSON())
 		if err != nil {
 			log.Println(err)
 			return
