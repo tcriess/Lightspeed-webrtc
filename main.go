@@ -15,6 +15,7 @@ import (
 	"github.com/GRVYDEV/lightspeed-webrtc/ws"
 	"github.com/gorilla/websocket"
 
+	"github.com/hashicorp/go-sockaddr/template"
 	"github.com/pion/interceptor"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
@@ -23,6 +24,7 @@ import (
 var (
 	addr     = flag.String("addr", "localhost", "http service address")
 	ip       = flag.String("ip", "none", "IP address for webrtc")
+	rtpIp    = flag.String("rtp-ip", "", "rtp listen IP")
 	wsPort   = flag.Int("ws-port", 8080, "Port for websocket")
 	rtpPort  = flag.Int("rtp-port", 65535, "Port for RTP")
 	ports    = flag.String("ports", "20000-20500", "Port range for webrtc")
@@ -42,7 +44,14 @@ func main() {
 	log.SetFlags(0)
 
 	// Open a UDP Listener for RTP Packets on port 65535
-	listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(*addr), Port: *rtpPort})
+	rtpAddr := *rtpIp
+	if rtpAddr == "" {
+		rtpAddr = *addr
+	}
+	if parsedRtpAddr, err := template.Parse(rtpAddr); err == nil {
+		rtpAddr = parsedRtpAddr
+	}
+	listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(rtpAddr), Port: *rtpPort})
 	if err != nil {
 		panic(err)
 	}
@@ -72,8 +81,12 @@ func main() {
 	// start HTTP server
 	go func() {
 		http.HandleFunc("/websocket", websocketHandler)
+		wsAddr := *addr
+		if w, err := template.Parse(*addr); err == nil {
+			wsAddr = w
+		}
 
-		log.Fatal(http.ListenAndServe(*addr+":"+strconv.Itoa(*wsPort), nil))
+		log.Fatal(http.ListenAndServe(wsAddr+":"+strconv.Itoa(*wsPort), nil))
 	}()
 
 	inboundRTPPacket := make([]byte, 4096) // UDP MTU
@@ -116,7 +129,11 @@ func createWebrtcApi() *webrtc.API {
 
 	// Set a NAT IP if one is given
 	if *ip != "none" {
-		s.SetNAT1To1IPs([]string{*ip}, webrtc.ICECandidateTypeHost)
+		if parsedIp, err := template.Parse(*ip); err == nil {
+			s.SetNAT1To1IPs([]string{parsedIp}, webrtc.ICECandidateTypeHost)
+		} else {
+			s.SetNAT1To1IPs([]string{*ip}, webrtc.ICECandidateTypeHost)
+		}
 	}
 
 	// Split given port range into two sides, pass them to SettingEngine
